@@ -34,31 +34,18 @@ class MNIST(dset.MNIST):
         Returns:
             tuple: (image, target) where target is index of the target class.
         """
-        tarjet2 = None
-        tarjet3 = None
-        img1, target = self.data[index], int(self.targets[index])
-        lend = len(self.data)
-        while (tarjet != tarjet2 or tarjet2 != None):
-            idx = random.randint(0,lend)
-            img2, target2 = self.data[idx], int(self.targets[idx])
+        target2 = -1
+        target3 = -1
+        img1, target1 = super().__getitem__(index) 
+        lend = len(self)
+        idx = random.randint(0,lend-1)
+        img2, target2 = super(MNIST,self).__getitem__(idx) 
         """
         while (tarjet3 != None or tarjet3 == tarjet):
             idx = random.randint(0,lend)
             img3, target3 = self.data[idx], int(self.targets[idx])
         """
-        # doing this so that it is consistent with all other datasets
-        # to return a PIL Image
-        img1 = Image.fromarray(img1.numpy(), mode='L')
-        img2 = Image.fromarray(img2.numpy(), mode='L') 
-        #img3 = Image.fromarray(img3.numpy(), mode='L')
-
-        if self.transform is not None:
-            img1 = self.transform(img1)
-            img2 = self.transform(img2)
-            img3 = self.transform(img3)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
+        label = 1. if target1 == target2 else 0.
 
 
-        return img1,img2,tarjet
+        return img1,img2,target1,label
