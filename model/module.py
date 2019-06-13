@@ -108,24 +108,30 @@ class SVM(nn.Module):
         fwd = self.fully_connected(x)  # Forward pass
         return fwd        
         
+from torchvision.models.resnet import ResNet, BasicBlock, Bottleneck
+
+class MNISTResNet(ResNet):
+    def __init__(self):
+        super(MNISTResNet, self).__init__(BasicBlock, [2, 2, 2, 2]) # Based on ResNet1
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=1, padding=3,bias=False)
         
 class SiaResNetwork(nn.Module):
-    def copy_data(m, i, o):
-        self.my_embedding.copy_(o.data)
-    def __init__(self,featSM,featRN,n_classes):
-        super(SiameseNetwork,self).__init__()
+
+    def __init__(self,featSM=4096,featRN=512,n_classes=9216):
+        super(SiaResNetwork,self).__init__()
         
-        self.resnet18 = rn.resnet18(pretrained=True,num_classes=n_class)
+        self.resnet18 = MNISTResNet()
         self.layer = self.resnet18._modules.get('avgpool')
         self.siamese = SiameseNetwork()
-        self.my_embedding = torch.zeros(512)
+        self.my_embedding = torch.zeros(1,9216)
         self.svm = SVM(featSM+featRN,n_classes)
                 
     def forward(self,x1,x2):
-        out1, features1 = self.siamese(x1,x2)
-        h = self.layer.register_forward_hook(copy_data)
-        out2 = self.resnet18(x1,x2)
+        features1,_,out1 = self.siamese(x1,x2)
+        def fun(m, i, o): self.my_embedding.copy_(o.data)
+        h = self.resnet18.register_forward_hook(fun)
+        out2 = self.resnet18(x1)
         h.remove()
         
         out3 = self.svm(features1+self.my_embedding)
-        return out1,out2,output3
+        return out1,out2,out3
