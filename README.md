@@ -1,4 +1,4 @@
-#Siamese and Resnet features for One shot Recognition model
+# Siamese and Resnet features for One shot Recognition model
 This project aims to create a one shot recognition model using the features
 extracted by a Siamese network and a Resnet.
 
@@ -7,9 +7,9 @@ features of a single image; so we can use both vectors for adding extra informat
 to the classification task.
 
 
-#Model Structure
+# Model Structure
 
-[!img siaresschema.png]
+[Model Structure](images/siaresmodel.png)
 
 
 Talking about a training scenario, the model trained is showed in the image posted
@@ -17,7 +17,7 @@ above. Firstly we are going to use a Resnet pretrained model on ImageNet, so all
 need from it is the features this network is able to extract by himself. As second
 model is used a Siamese network with the following inner configuration:
     
-[!img siainner.png]
+[Inner model of Siamese Network](images/siainner.png)
 REF:: *link*
 
 As this model has to be trained, we are going to set a DoubleLoss for this model.
