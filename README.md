@@ -9,7 +9,7 @@ to the classification task.
 
 # Model Structure
 
-[Model Structure](images/siaresmodel.png)
+![Model Structure](images/siaresmodel.jpg)
 
 
 Talking about a training scenario, the model trained is showed in the image posted
@@ -17,7 +17,7 @@ above. Firstly we are going to use a Resnet pretrained model on ImageNet, so all
 need from it is the features this network is able to extract by himself. As second
 model is used a Siamese network with the following inner configuration:
     
-[Inner model of Siamese Network](images/siainner.png)
+![Inner model of Siamese Network](images/siainner.jpg)
 REF:: *link*
 
 As this model has to be trained, we are going to set a DoubleLoss for this model.
