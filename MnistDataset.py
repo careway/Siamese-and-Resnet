@@ -21,6 +21,10 @@ from PIL import Image
 
 
 class MNIST(dset.MNIST):
+    def __init__(self, root, train=True, transform=None, target_transform=None, download=False,valid=False):
+        super(MNIST,self).__init__(root, train, transform, target_transform, download)
+        self.valid = valid
+        
 
     def __getitem__(self, index):
         label = None
@@ -36,16 +40,18 @@ class MNIST(dset.MNIST):
         """
         target2 = -1
         target3 = -1
-        img1, target1 = super().__getitem__(index) 
+        img1, target1 = super(MNIST,self).__getitem__(index)
         lend = len(self)
         idx = random.randint(0,lend-1)
         img2, target2 = super(MNIST,self).__getitem__(idx) 
+        while not self.valid and target2 == 9:
+            idx = random.randint(0,lend-1)
+            img2, target2 = super(MNIST,self).__getitem__(idx) 
         """
         while (tarjet3 != None or tarjet3 == tarjet):
             idx = random.randint(0,lend)
             img3, target3 = self.data[idx], int(self.targets[idx])
         """
         label = 1. if target1 == target2 else 0.
-
-
-        return img1,img2,target1,label
+        
+        return img1,img2,label,target1

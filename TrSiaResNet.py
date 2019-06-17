@@ -26,7 +26,7 @@ from tqdm import tqdm
 from utils import AverageMeter
 import MnistDataset
 import model.module as md
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
 
 
 
@@ -66,7 +66,7 @@ test_loader = DataLoader(datatest,1,shuffle,num_workers=num_workers,
                           pin_memory=pin_memory)
 
 ## Model, loss and optimicer
-model = md.SiameseNetwork()
+model = md.SiaResNetwork()
 
 criterion = F.binary_cross_entropy_with_logits
 optimizer = optim.Adam(model.parameters(), lr=3e-4, weight_decay=6e-5)
@@ -87,7 +87,7 @@ def create_trainer_dset():
             
         if len(ys) == 10:
             break
-    return zip(xs,x1s,lbls)
+    return zip(xs,x1s,lbls,ys)
 
 def train(epoch):
     plot = False
@@ -96,16 +96,16 @@ def train(epoch):
     accs = AverageMeter()
     tic = time.time()
     with tqdm(total=10) as pbar:
-        for i, (x,x1,y) in enumerate(create_trainer_dset()):
+        for i, (x,x1,y,label) in enumerate(create_trainer_dset()):
             if use_gpu:
                 x, x1, y = x.cuda(), x1.cuda(), y.cuda()
             x, x1, y = Variable(x),Variable(x1), Variable(y)
-                
-
-        
             
-            f1,f2,y_pred = model(x,x1)
-            loss = criterion(y_pred[0].cpu(),y.type(torch.FloatTensor))
+            out1,out2,out3 = model(x,x1)
+            loss_siamese = criterion(out1[0].cpu(),y.type(torch.FloatTensor))
+            _,loss_resnet = torch.max(out2)==label
+            _,loss_siares = torch.max(out3)==label
+            loss = loss_siamese + loss_resnet + loss_siares
             losses.update(loss)
             #accs.update(sum(y==y_pred))
             

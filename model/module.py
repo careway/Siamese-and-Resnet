@@ -10,6 +10,7 @@ import torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
+from torchvision.models.resnet import ResNet, BasicBlock, Bottleneck
 from math import log
 
 
@@ -93,45 +94,23 @@ class SiameseNetwork(nn.Module):
         dis = torch.abs(o1-o2)
         out = self.fco(dis)
         return f1,f2,out
-        
-            
-class SVM(nn.Module):
-    """
-    Linear Support Vector Machine
-    -----------------------------
-    """
-    def __init__(self,n_input,n_output):
-        super().__init__()  # Call the init function of nn.Module
-        self.fully_connected = nn.Linear(n_input, n_output)  # Implement the Linear function
-        
-    def forward(self, x):
-        fwd = self.fully_connected(x)  # Forward pass
-        return fwd        
-        
-from torchvision.models.resnet import ResNet, BasicBlock, Bottleneck
 
-class MNISTResNet(ResNet):
-    def __init__(self):
-        super(MNISTResNet, self).__init__(BasicBlock, [2, 2, 2, 2]) # Based on ResNet1
-        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=1, padding=3,bias=False)
-        
+
 class SiaResNetwork(nn.Module):
 
-    def __init__(self,featSM=4096,featRN=512,n_classes=9216):
+    def __init__(self,featSM=4096,featRN=512,n_classes=10):
         super(SiaResNetwork,self).__init__()
         
-        self.resnet18 = MNISTResNet()
+        self.resnet18 = models.resnet18(pretrained=True)
+        self.resnet18.fc= nn.Identity()
+        self.resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=1, padding=3,bias=False)
         self.layer = self.resnet18._modules.get('avgpool')
         self.siamese = SiameseNetwork()
-        self.my_embedding = torch.zeros(1,9216)
-        self.svm = SVM(featSM+featRN,n_classes)
                 
     def forward(self,x1,x2):
         features1,_,out1 = self.siamese(x1,x2)
-        def fun(m, i, o): self.my_embedding.copy_(o.data)
-        h = self.resnet18.register_forward_hook(fun)
-        out2 = self.resnet18(x1)
-        h.remove()
+        features2 = self.resnet18(x1)
         
-        out3 = self.svm(features1+self.my_embedding)
-        return out1,out2,out3
+        
+        
+        return out1,out3
