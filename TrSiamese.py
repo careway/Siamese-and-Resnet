@@ -26,6 +26,7 @@ from tqdm import tqdm
 from utils import AverageMeter
 import MnistDataset
 import model.module as md
+import itertools
 from matplotlib import pyplot as plt
 
 
@@ -40,9 +41,10 @@ pin_memory = True
 test = False
 # Train loop
 plot = False
-epochs = 60
-train_patience=20
+epochs = 200
+train_patience=60
 best_valid_loss=1
+counter=0
 ### Data Creation
 #Route
 routedt= "./dataset/"
@@ -73,15 +75,15 @@ valid_loader = DataLoader(dataval,batch_size=batch_size,sampler=valid_sampler,nu
                           
 
 #### Model, loss and optimicer
+l2 = lambda epoch: 0.95 ** epoch
 model = md.SiameseNetwork()
 criterion = nn.BCEWithLogitsLoss()
-optimizer = optim.Adam(model.parameters(), lr=3e-4, weight_decay=5e-5)
-
+optimizer = optim.Adam(model.parameters(), lr=3e-4, weight_decay=6e-5)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=20, verbose=True)
 if use_gpu:
     model.cuda()
 
 def train(epoch):
-
     batch_time = AverageMeter()
     losses = AverageMeter()
     accs = AverageMeter()
@@ -117,6 +119,7 @@ def evaluate (epoch):
     losses = AverageMeter()
     accs = AverageMeter()
     tic = time.time()
+    classification=[]
     with tqdm(total=len(valid_loader)*batch_size) as pbar:
         for i,(x,x1,y,_) in enumerate(valid_loader):
             if use_gpu:
@@ -124,6 +127,8 @@ def evaluate (epoch):
             x, x1, y = Variable(x),Variable(x1), Variable(y)
 
             f1,f2,y_pred = model(x,x1)
+            
+            classification.append(list(zip(y_pred.flatten().cpu().tolist(),y.type(torch.FloatTensor).flatten().tolist())))
             loss = criterion(y_pred.flatten().cpu(),y.type(torch.FloatTensor).flatten())
             losses.update(loss.item())
             #accs.update(sum(y==y_pred))
@@ -144,7 +149,7 @@ def evaluate (epoch):
             
             pbar.set_description("   Valid: {:.1f}s".format(toc-tic))
             pbar.update(batch_size)
-    return losses.avg
+    return losses.avg,classification
 
 
 for i in range(epochs):
@@ -152,16 +157,31 @@ for i in range(epochs):
     model.train()
     train_loss = train(i)
     model.eval()
-    valid_loss = evaluate(i)
+    valid_loss,clss = evaluate(i)
     # # reduce lr if validation loss plateaus
     # self.scheduler.step(valid_loss)
-
+    scheduler.step(valid_loss)
+    
+    rt = list(itertools.chain(*clss))
+    x = [x[0] for x in rt]
+    y = [x[1] for x in rt]
+    x = np.array(x)
+    idxb = [ys == 1. for ys in y]
+    idxr = [ys == 0. for ys in y]
+    
     is_best = valid_loss < best_valid_loss
     msg = "Epoch {}: Train loss = {:.3f} - Valid loss = {:.3f}"
     if is_best:
         model_save = model.state_dict()
         counter = 0
-        msg += " [*]"
+        msg += " [*]"       
+    if i%5==0 or is_best:
+        plt.hist(x=x[idxr], bins='auto', color='#ff6347',
+                            alpha=0.7, rwidth=0.85)
+        plt.hist(x=x[idxb], bins='auto', color='#0504aa',
+                            alpha=0.7, rwidth=0.85) 
+        plt.grid(axis='y', alpha=0.75)
+        plt.savefig("images/1/siames{}.png".format(i))
     print(msg.format(i, train_loss, valid_loss))
 
     # check for improvement

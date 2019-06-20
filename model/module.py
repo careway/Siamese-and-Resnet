@@ -100,17 +100,23 @@ class SiaResNetwork(nn.Module):
 
     def __init__(self,featSM=4096,featRN=512,n_classes=10):
         super(SiaResNetwork,self).__init__()
-        
+        # Resnet set
         self.resnet18 = models.resnet18(pretrained=True)
         self.resnet18.fc= nn.Identity()
         self.resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=1, padding=3,bias=False)
-        self.layer = self.resnet18._modules.get('avgpool')
+        
+        # Siamese set
         self.siamese = SiameseNetwork()
+        self.fc1 = nn.Linear(9728,512)
+        self.fco = nn.Linear(512,10)
                 
     def forward(self,x1,x2):
         features1,_,out1 = self.siamese(x1,x2)
         features2 = self.resnet18(x1)
         
+        f12= torch.cat((features1,features2),1)
+        
+        fco = self.fco(F.relu(self.fc1(f12)))
         
         
-        return out1,out3
+        return out1,fco

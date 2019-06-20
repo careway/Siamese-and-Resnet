@@ -26,68 +26,68 @@ from tqdm import tqdm
 from utils import AverageMeter
 import MnistDataset
 import model.module as md
-import matplotlib.pyplot as plt
+import itertools
+from matplotlib import pyplot as plt
 
 
 
-#### Data creation
+#### Variables set
 use_gpu = True
-
-
-## Dataset
 valid_size = 0.2
-batch_size = 1
+batch_size = 60
 shuffle = True
-num_workers = 2
+num_workers = 1
 pin_memory = True
+test = False
+counter = 0
+# Train loop
+plot = False
+epochs = 200
+train_patience=60
+best_valid_loss=20
+#optim
+lr=3e-4
+wd=6e-5
 
 
+### Data Creation
+#Route
 routedt= "./dataset/"
-
+#Transformations
 transforms = transforms.Compose([transforms.Resize((105,105)),
                                  transforms.ToTensor()])
 
 
+#Loading Data
+if not test:
+    data = MnistDataset.MNIST(root=routedt,transform=transforms,download=True)
+    dataval= MnistDataset.MNIST(root=routedt,transform=transforms,download=True,valid=True)
+else:
+    data = MnistDataset.MNIST(root=routedt,transform=transforms,train=False)
 
-data = MnistDataset.MNIST(root=routedt,transform=transforms,download=True)
+#Parsing data for one shot training
+#Training dataloader
+idx = data.train_labels!=9
+train_sampler = SubsetRandomSampler(idx.nonzero().flatten())
 
-datatest = MnistDataset.MNIST(root=routedt,transform=transforms,train=False)
-
-indices = list(range(len(data)))
-split = int(np.floor(valid_size * len(data)))
-train_idx, valid_idx = indices[split:], indices[:split]
-
-train_loader = DataLoader(data,batch_size,shuffle,num_workers=num_workers,
-                          pin_memory=pin_memory)
-valid_loader = DataLoader(data,1,shuffle,num_workers=num_workers,
+train_loader = DataLoader(data,batch_size=batch_size,sampler=train_sampler,
+                          num_workers=num_workers, pin_memory=pin_memory)
+#Valid dataloader
+idx = dataval.train_labels==9
+valid_sampler = SubsetRandomSampler(idx.nonzero().flatten())
+valid_loader = DataLoader(dataval,batch_size=batch_size,sampler=valid_sampler,num_workers=num_workers,
                           pin_memory=pin_memory)
                           
-test_loader = DataLoader(datatest,1,shuffle,num_workers=num_workers,
-                          pin_memory=pin_memory)
 
 ## Model, loss and optimicer
 model = md.SiaResNetwork()
 
-criterion = F.binary_cross_entropy_with_logits
-optimizer = optim.Adam(model.parameters(), lr=3e-4, weight_decay=6e-5)
+criterion = nn.BCEWithLogitsLoss()
+criterion2 = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 if use_gpu:
     model.cuda()
-
-
-def create_trainer_dset():
-    xs,x1s = [],[]
-    lbls,ys = [],[]
-
-    for i,(x,x1,y,label) in enumerate(train_loader):
-        if y not in ys:
-            xs.append(x)
-            x1s.append(x1)
-            ys.append(y)
-            lbls.append(label)
-            
-        if len(ys) == 10:
-            break
-    return zip(xs,x1s,lbls,ys)
+    
 
 def train(epoch):
     plot = False
@@ -95,19 +95,25 @@ def train(epoch):
     losses = AverageMeter()
     accs = AverageMeter()
     tic = time.time()
-    with tqdm(total=10) as pbar:
-        for i, (x,x1,y,label) in enumerate(create_trainer_dset()):
+    with tqdm(total=len(train_loader)*batch_size) as pbar:
+        for i, (x,x1,label,y) in enumerate(train_loader):
             if use_gpu:
                 x, x1, y = x.cuda(), x1.cuda(), y.cuda()
             x, x1, y = Variable(x),Variable(x1), Variable(y)
             
-            out1,out2,out3 = model(x,x1)
-            loss_siamese = criterion(out1[0].cpu(),y.type(torch.FloatTensor))
-            _,loss_resnet = torch.max(out2)==label
-            _,loss_siares = torch.max(out3)==label
-            loss = loss_siamese + loss_resnet + loss_siares
-            losses.update(loss)
+          
+            out1,fco = model(x,x1)
+            
+            loss_siamese = criterion(out1.flatten(),label.type(torch.FloatTensor).flatten().cuda())
+            loss_final_class = criterion2(fco,y)
+            
+            loss = loss_siamese + loss_final_class
+            losses.update(loss.item())
             #accs.update(sum(y==y_pred))
+            predicted = torch.max(fco, 1)[1]
+            correct = (predicted == y).float()
+            acc = 100 * (correct.sum() / len(y))
+            accs.update(acc)
             
             #print
             if plot:
@@ -121,7 +127,8 @@ def train(epoch):
 
             # compute gradients and update ADAM
             optimizer.zero_grad()    
-            loss.backward()
+            loss_siamese.backward(retain_graph=True)
+            loss_final_class.backward()
             optimizer.step()
             # measure elapsed time
             toc = time.time()
@@ -143,19 +150,29 @@ def evaluate (epoch):
     losses = AverageMeter()
     accs = AverageMeter()
     tic = time.time()
-    
-    with tqdm(total=len(datatest)) as pbar:
-        for i,(x,x1,label,y) in enumerate(test_loader):
+    classification=[]
+    with tqdm(total=len(valid_loader)*batch_size) as pbar:
+        for i,(x,x1,label,y) in enumerate(valid_loader):
             if use_gpu:
                 x, x1, y = x.cuda(), x1.cuda(), y.cuda()
             x, x1, y = Variable(x),Variable(x1), Variable(y)
 
-            f1,f2,y_pred = model(x,x1)
-            loss = criterion(y_pred[0].cpu(),y.type(torch.FloatTensor))
+            out1,fco = model(x,x1)
+            
+            loss_siamese = criterion(out1.flatten().cpu(),label.type(torch.FloatTensor).flatten())
+            loss_final_class = criterion2(fco,y)
+            
+            loss = loss_siamese + loss_final_class
             losses.update(loss.item())
             #accs.update(sum(y==y_pred))
-
-                        
+            predicted = torch.max(fco, 1)[1]
+            correct = (predicted == y).float()
+            acc = 100 * (correct.sum() / len(y))
+            accs.update(acc.item())
+            
+            #loss graphic from siamese
+            classification.append(list(zip(out1.flatten().cpu().tolist(),label.type(torch.FloatTensor).flatten().tolist())))
+            
             
             
             # measure elapsed time
@@ -166,15 +183,44 @@ def evaluate (epoch):
             #    loss.item())
             #)
             pbar.update(batch_size)
-            torch.cuda.empty_cache()
-    return losses.avg,accs.avg
+    return losses.avg,accs.avg,classification
 
 epochs = 60
 for i in range(epochs):
     
     model.train()
     train_loss,train_acc = train(i)
-    print("Train epoch {}: loss = {:.3f} - acc = {:.3f}".format(i,train_loss,train_acc))
     model.eval()
-    valid_loss,valid_acc = evaluate(i)
-    print("Valid epoch {}: loss = {:.3f} - acc = {:.3f}".format(i,valid_loss,valid_acc))
+    valid_loss,valid_acc,clss = evaluate(i)
+    
+    rt = list(itertools.chain(*clss))
+    x = [x[0] for x in rt]
+    y = [x[1] for x in rt]
+    x = np.array(x)
+    idxb = [ys == 1. for ys in y]
+    idxr = [ys == 0. for ys in y]    
+    
+    
+    
+    is_best = valid_loss < best_valid_loss
+    msg = "Epoch {}: Train: loss = {:.3f} acc = {:.3f} - Valid: loss = {:.3f} acc={:.3f}"
+    if is_best:
+        model_save = model.state_dict()
+        counter = 0
+        msg += " [*]"       
+    if i%5==0 or is_best:
+        plt.hist(x=x[idxr], bins='auto', color='#ff6347',
+                            alpha=0.7, rwidth=0.85)
+        plt.hist(x=x[idxb], bins='auto', color='#0504aa',
+                            alpha=0.7, rwidth=0.85) 
+        plt.grid(axis='y', alpha=0.75)
+        plt.savefig("images/SiaRes/epoch_{}_{}_{}.png".format(i,lr,wd))
+    print(msg.format(i, train_loss,train_acc, valid_loss,valid_acc))
+
+    # check for improvement
+    if not is_best:
+        counter += 1
+    if counter > train_patience:
+        print("[!] No improvement in a while, stopping training.")
+        break
+    best_valid_loss = min(valid_loss, best_valid_loss)    

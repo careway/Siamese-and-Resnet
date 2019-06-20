@@ -24,6 +24,7 @@ class MNIST(dset.MNIST):
     def __init__(self, root, train=True, transform=None, target_transform=None, download=False,valid=False):
         super(MNIST,self).__init__(root, train, transform, target_transform, download)
         self.valid = valid
+        self.equal = False
         
 
     def __getitem__(self, index):
@@ -44,9 +45,14 @@ class MNIST(dset.MNIST):
         lend = len(self)
         idx = random.randint(0,lend-1)
         img2, target2 = super(MNIST,self).__getitem__(idx) 
-        while not self.valid and target2 == 9:
+        while not self.valid and target2 == 9 and self.equal!=(target1==target2):
             idx = random.randint(0,lend-1)
             img2, target2 = super(MNIST,self).__getitem__(idx) 
+        while self.valid and self.equal!=(target2 ==9):
+            idx = random.randint(0,lend-1)
+            img2, target2 = super(MNIST,self).__getitem__(idx) 
+            
+        self.equal = False if self.equal else True
         """
         while (tarjet3 != None or tarjet3 == tarjet):
             idx = random.randint(0,lend)
@@ -54,4 +60,5 @@ class MNIST(dset.MNIST):
         """
         label = 1. if target1 == target2 else 0.
         
-        return img1,img2,label,target1
+        
+        return img1,img2,label,target1.type(torch.LongTensor)
